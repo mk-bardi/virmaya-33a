@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-sim_dashboard.py - live flight-test dashboard for ArduPilot SITL (or a real vehicle). Dark theme.
+sim_dashboard.py - live flight-test dashboard for ArduPilot SITL (or a real vehicle). "Sahel night" theme:
+instrument rail on the left, ground track with range rings in the centre, eight charts on the right.
 
 While you fly it shows status, key numbers and live charts. When you stop it (close the window,
 Ctrl+C, or --duration runs out) it saves a CSV of every sample, a PNG report in the same design,
@@ -37,31 +38,34 @@ from matplotlib.ticker import FuncFormatter, MaxNLocator
 logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
 
 # --------------------------------------------------------------------------------------------
-# Design tokens (dark mode). Series colours are the validated dark categorical slots 1-5, used
-# in fixed order (colour follows the entity). Status colours are reserved for state and always
-# paired with a symbol + word. Text never wears a series colour.
+# Design tokens: "Sahel night". Warm dark surfaces, field-instrument layout.
+# Series colours are a 5-slot dark categorical palette validated with the dataviz checker
+# (lightness band, chroma, CVD and normal-vision separation, 3:1 on the surface), used in fixed
+# order so colour follows the entity. Status colours are reserved for state and always paired
+# with a symbol + word. Text never wears a series colour.
 # --------------------------------------------------------------------------------------------
 T = {
-    "page": "#0d0d0d", "surface": "#1a1a19", "chip": "#242422",
-    "ink": "#f0efec", "ink2": "#c3c2b7", "muted": "#898781",
-    "grid": "#2c2c2a", "base": "#383835", "border": (1, 1, 1, 0.10),
+    "page": "#100f0c", "surface": "#191814", "chip": "#24221c", "rail": "#15140f",
+    "ink": "#f2efe6", "ink2": "#c9c3b2", "muted": "#8f8977",
+    "grid": "#2e2b23", "base": "#3b382e", "border": (1, 0.95, 0.8, 0.07),
 }
-SERIES = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181"]   # blue, orange, aqua, yellow, magenta
+SERIES = ["#22a38a", "#c27e14", "#4f8fe0", "#d2577a", "#9085e9"]   # teal, ochre, sky, rose, violet
 STATUS = {"good": "#0ca30c", "warning": "#fab219", "serious": "#ec835a", "critical": "#d03b3b"}
+MONO = ["Ubuntu Mono", "DejaVu Sans Mono", "monospace"]
 
 plt.rcParams.update({
     "toolbar": "None",
     "font.family": "sans-serif",
-    "font.sans-serif": ["Inter", "Ubuntu", "Cantarell", "Segoe UI", "Helvetica", "Arial", "DejaVu Sans"],
+    "font.sans-serif": ["Ubuntu", "Inter", "Cantarell", "Segoe UI", "Helvetica", "Arial", "DejaVu Sans"],
     "figure.facecolor": T["page"], "savefig.facecolor": T["page"],
     "axes.facecolor": T["surface"], "axes.edgecolor": T["surface"],
     "axes.labelcolor": T["muted"], "text.color": T["ink"],
     "xtick.color": T["muted"], "ytick.color": T["muted"],
     "xtick.labelsize": 7.5, "ytick.labelsize": 7.5,
     "xtick.major.size": 0, "ytick.major.size": 0, "xtick.major.pad": 4, "ytick.major.pad": 4,
-    "grid.color": T["grid"], "grid.linewidth": 0.7, "grid.linestyle": "-",
-    "lines.linewidth": 1.5, "lines.solid_capstyle": "round", "lines.solid_joinstyle": "round",
-    "legend.frameon": False, "legend.fontsize": 7.5, "legend.labelcolor": T["ink2"],
+    "grid.color": T["grid"], "grid.linewidth": 0.8, "grid.linestyle": (0, (1, 2.5)),
+    "lines.linewidth": 1.6, "lines.solid_capstyle": "round", "lines.solid_joinstyle": "round",
+    "legend.frameon": False, "legend.fontsize": 7.2, "legend.labelcolor": T["ink2"],
 })
 
 SCALARS = [
@@ -75,20 +79,17 @@ SCALARS = [
 # chart key: (title, unit, [(data key, legend label, series slot, line style)], signed?)
 CHARTS = {
     "alt":   ("Altitude", "m above home", [("alt", "altitude", 0, "-")], False),
+    "spd":   ("Speed", "m/s", [("airspeed", "air", 0, "-"), ("groundspeed", "ground", 1, "-")], False),
     "climb": ("Climb rate", "m/s", [("climb", "climb", 0, "-")], True),
-    "spd":   ("Speed", "m/s", [("airspeed", "airspeed", 0, "-"), ("groundspeed", "groundspeed", 1, "-")], False),
     "att":   ("Attitude", "deg", [("roll", "roll", 0, "-"), ("nav_roll", None, 0, "--"),
                                   ("pitch", "pitch", 1, "-"), ("nav_pitch", None, 1, "--")], True),
-    "yaw":   ("Yaw rate", "deg/s", [("yach", "actual", 0, "-"), ("ydes", "desired", 0, "--")], True),
     "mot":   ("Motors", "PWM", [("s5", "M1", 0, "-"), ("s6", "M2", 1, "-"), ("s7", "M3", 2, "-"),
-                                       ("s8", "M4", 3, "-"), ("s3", "pusher", 4, "-")], False),
+                                       ("s8", "M4", 3, "-"), ("s3", "push", 4, "-")], False),
+    "yaw":   ("Yaw rate", "deg/s", [("yach", "actual", 0, "-"), ("ydes", "desired", 0, "--")], True),
     "cur":   ("Battery current", "A", [("curr", "current", 0, "-")], False),
     "volt":  ("Battery voltage", "V", [("volt", "voltage", 0, "-")], False),
-    "hdg":   ("Heading", "deg", [("heading", "heading", 0, "-")], False),
 }
-GRID = [["alt", "climb", "spd", "trk"],
-        ["att", "yaw", "mot", "trk"],
-        ["cur", "volt", "hdg", "log"]]
+CHART_GRID = [["alt", "spd"], ["climb", "att"], ["mot", "yaw"], ["cur", "volt"]]
 SINGLE_ENDPOINT = {"alt", "climb", "cur", "volt"}     # charts that get a ringed endpoint dot
 LOG_LINES = 9
 
@@ -270,20 +271,28 @@ def battery_status(pct):
 
 
 # --------------------------------------------------------------------------------------------
-# Dashboard figure
+# Dashboard figure. Layout (px at dpi 100):
+#   header strip      wordmark left, status chips right
+#   left rail         instrument readouts, one per row, values in a fixed tabular column
+#   centre            ground track with range rings (big), events below it
+#   right             eight time-series charts, 2 columns x 4 rows
 # --------------------------------------------------------------------------------------------
 class Dashboard:
-    W, H = 1600, 900          # px at dpi 100
+    W, H = 1600, 900
+    PAD, GAP, TOP = 16, 10, 70
+    RAIL_W, MAP_W = 300, 560
+    MAP_H = 540
 
     def __init__(self, title="SITL", subtitle=""):
         self.fig = plt.figure(figsize=(self.W / 100, self.H / 100), dpi=100)
         try:
-            self.fig.canvas.manager.set_window_title(f"{title} · flight dashboard")
+            self.fig.canvas.manager.set_window_title(f"{title} · flight lab")
         except AttributeError:
             pass
         self.ax, self.L, self.tiles, self.markers = {}, {}, {}, {}
         self._header(title, subtitle)
-        self._tiles()
+        self._rail()
+        self._map_and_events()
         self._charts()
 
     # geometry helpers (px -> figure fraction, origin top-left for readability)
@@ -293,12 +302,16 @@ class Dashboard:
     def fy(self, px_from_top):
         return 1 - px_from_top / self.H
 
-    def card(self, x, y, w, h):
-        """Rounded card, x/y/w/h in px from the top-left."""
+    def card(self, x, y, w, h, color=None, radius=0.008):
         p = FancyBboxPatch((self.fx(x), self.fy(y + h)), self.fx(w), h / self.H,
-                           boxstyle="round,pad=0,rounding_size=0.006", transform=self.fig.transFigure,
-                           facecolor=T["surface"], edgecolor=T["border"], linewidth=0.8, zorder=0)
+                           boxstyle=f"round,pad=0,rounding_size={radius}", transform=self.fig.transFigure,
+                           facecolor=color or T["surface"], edgecolor=T["border"], linewidth=0.8, zorder=0)
         self.fig.patches.append(p)
+        return p
+
+    def hline(self, x0, x1, y, color=None, lw=0.8):
+        self.fig.add_artist(plt.Line2D([self.fx(x0), self.fx(x1)], [self.fy(y), self.fy(y)],
+                                       transform=self.fig.transFigure, color=color or T["grid"], linewidth=lw, zorder=1))
 
     def text(self, x, y, s, **kw):
         kw.setdefault("color", T["ink"])
@@ -313,45 +326,65 @@ class Dashboard:
         self.fig.add_artist(a)
         return a
 
+    def section(self, x, y, label, unit=""):
+        """Small upper-case section label with an optional unit after it."""
+        t = self.text(x, y, label.upper(), fontsize=8, fontweight="bold", color=T["ink2"], va="bottom")
+        u = self.after(t, unit, 6, fontsize=7.5, color=T["muted"]) if unit is not None else None
+        return t, u
+
     # ---- header -----------------------------------------------------------------------------
     def _header(self, title, subtitle):
-        tt = self.text(20, 30, title.upper(), fontsize=14, fontweight="bold", va="bottom")
-        self.after(tt, "flight test", 6, fontsize=11, color=T["ink2"])
-        self.h_sub = self.text(20, 48, subtitle, fontsize=8.5, color=T["muted"], va="baseline")
-        # right side: status items, laid out right-to-left at fixed slots
+        self.card(self.PAD, 14, 6, 34, color=T["ink2"], radius=0.002)              # wordmark bar
+        tt = self.text(self.PAD + 16, 38, title.upper(), fontsize=17, fontweight="bold", va="baseline")
+        self.after(tt, "flight lab", 8, fontsize=11, color=T["ink2"])
+        self.h_sub = self.text(self.PAD + 16, 54, subtitle, fontsize=8, color=T["muted"], va="baseline")
+        # status chips, right-aligned: mode, motors, telemetry, clock
         self.h = {}
-        slots = {"link": 1430, "armed": 1270, "mode": 1100, "clock": 1530}
-        for k, x in slots.items():
+        x = self.W - self.PAD
+        for k, w, label in (("clock", 112, "since start"), ("link", 128, "telemetry"),
+                            ("armed", 168, "motors"), ("mode", 150, "flight mode")):
+            x -= w
+            self.card(x, 12, w, 44, color=T["chip"], radius=0.006)
             if k == "clock":
-                self.h[k] = self.text(x + 50, 30, "", fontsize=12, color=T["ink"], ha="right", va="bottom")
-                self.text(x + 50, 47, "time since start", fontsize=7.5, color=T["muted"], ha="right", va="baseline")
-                continue
-            self.h[k + "_dot"] = self.text(x, 30, "", fontsize=11, va="bottom")
-            self.h[k] = self.after(self.h[k + "_dot"], "", 4, fontsize=11, fontweight="bold")
-            self.text(x + 16, 47, {"link": "telemetry", "armed": "motors", "mode": "flight mode"}[k],
-                      fontsize=7.5, color=T["muted"], va="baseline")
+                self.h[k] = self.text(x + 14, 33, "", fontsize=14, family=MONO, va="baseline")
+            else:
+                self.h[k + "_dot"] = self.text(x + 12, 33, "", fontsize=11, va="baseline")
+                self.h[k] = self.after(self.h[k + "_dot"], "", 4, fontsize=11.5, fontweight="bold")
+            self.text(x + 14, 48, label, fontsize=7.2, color=T["muted"], va="baseline")
+            x -= 8
+        self.hline(self.PAD, self.W - self.PAD, 62, color=T["base"])
 
     def set_status(self, key, word, status=None, symbol="●"):
         self.h[key].set_text(word)
         self.h[key + "_dot"].set_text(symbol)
         self.h[key + "_dot"].set_color(STATUS[status] if status else T["muted"])
 
-    # ---- stat tiles -------------------------------------------------------------------------
-    TILE_KEYS = ["alt", "air", "gnd", "climb", "thr", "batt", "time"]
+    # ---- left rail: instrument readouts ------------------------------------------------------
+    TILE_KEYS = ["alt", "air", "gnd", "climb", "thr", "hdg", "batt", "time"]
 
-    def _tiles(self):
-        x0, y0, gap, h = 16, 62, 10, 92
-        w = (self.W - 2 * x0 - gap * (len(self.TILE_KEYS) - 1)) / len(self.TILE_KEYS)
+    def _rail(self):
+        x, y0, w = self.PAD, self.TOP, self.RAIL_W
+        h = self.H - self.PAD - y0
+        self.card(x, y0, w, h, color=T["rail"])
+        self.section(x + 16, y0 + 26, "Instruments", None)
+        top = y0 + 40
+        rh = (y0 + h - 10 - top) / len(self.TILE_KEYS)
+        vcol = x + w - 56                                  # right edge of values (tabular column)
         for i, k in enumerate(self.TILE_KEYS):
-            x = x0 + i * (w + gap)
-            self.card(x, y0, w, h)
-            t = {"label": self.text(x + 14, y0 + 22, "", fontsize=8.5, color=T["muted"], va="baseline"),
-                 "value": self.text(x + 14, y0 + 64, "", fontsize=24, color=T["ink"], va="bottom"),
-                 "sub_dot": self.text(x + 14, y0 + 84, "", fontsize=8, va="bottom"),
-                 "x": x}
-            t["unit"] = self.after(t["value"], "", 3, fontsize=10, color=T["ink2"])
+            ry = top + i * rh
+            if i:
+                self.hline(x + 16, x + w - 16, ry)
+            t = {"label": self.text(x + 16, ry + 26, "", fontsize=8.5, color=T["muted"], va="baseline"),
+                 "value": self.text(vcol, ry + rh * 0.60, "", fontsize=26, family=MONO, ha="right", va="baseline"),
+                 "unit": self.text(vcol + 6, ry + rh * 0.60, "", fontsize=10, color=T["ink2"], va="baseline"),
+                 "sub_dot": self.text(x + 16, ry + rh - 11, "", fontsize=8, va="baseline")}
             t["sub"] = self.after(t["sub_dot"], "", 2, fontsize=8, color=T["muted"])
             self.tiles[k] = t
+        # battery meter under the battery readout: track + fill
+        by = top + self.TILE_KEYS.index("batt") * rh + rh - 29
+        self.meter_box = (x + 16, by, w - 32)
+        self.meter_track = self.card(x + 16, by, w - 32, 5, color=T["base"], radius=0.002)
+        self.meter = self.card(x + 16, by, 0.001, 5, color=T["muted"], radius=0.002)
 
     def set_tile(self, k, label, value, unit="", sub="", sub_status=None):
         t = self.tiles[k]
@@ -363,101 +396,65 @@ class Dashboard:
             t["sub_dot"].set_color(STATUS[sub_status])
         t["sub"].set_text(sub)
 
-    # ---- charts -----------------------------------------------------------------------------
-    def _charts(self):
-        x0, top, gap = 16, 166, 10
-        bottom = self.H - 14
-        cols, rows = 4, 3
-        cw = (self.W - 2 * x0 - gap * (cols - 1)) / cols
-        rh = (bottom - top - gap * (rows - 1)) / rows
-        placed = set()
-        for r in range(rows):
-            for c in range(cols):
-                key = GRID[r][c]
-                if key in placed:
-                    continue
-                placed.add(key)
-                span = sum(1 for rr in range(rows) if GRID[rr][c] == key)
-                x, y = x0 + c * (cw + gap), top + r * (rh + gap)
-                h = rh * span + gap * (span - 1)
-                self.card(x, y, cw, h)
-                if key == "log":
-                    self._log(x, y, cw, h)
-                    continue
-                ax = self.fig.add_axes([self.fx(x + 46), self.fy(y + h - 24), self.fx(cw - 60), (h - 24 - 38) / self.H])
-                ax.set_zorder(2)
-                self.ax[key] = ax
-                title, unit = ("Ground track", "m from takeoff") if key == "trk" else CHARTS[key][:2]
-                tt = self.text(x + 14, y + 26, title, fontsize=9.5, fontweight="bold", va="bottom")
-                self.after(tt, unit, 5, fontsize=8, color=T["muted"])
-                self._style_axes(ax)
-                if key == "trk":
-                    self._track(ax)
-                else:
-                    self._timeseries(key, ax, x, y, cw)
+    def set_meter(self, pct, status=None):
+        x, y, w = self.meter_box
+        if not isnum(pct):
+            self.meter.set_visible(False); self.meter_track.set_visible(False)
+            return
+        self.meter.set_visible(True); self.meter_track.set_visible(True)
+        self.meter.set_width(self.fx(max(0.001, w * min(100, max(0, pct)) / 100)))
+        self.meter.set_facecolor(STATUS[status] if status else T["ink2"])
 
-    def _style_axes(self, ax):
-        for s in ax.spines.values():
-            s.set_visible(False)
-        ax.grid(True, axis="y")
-        ax.set_axisbelow(True)
-        ax.yaxis.set_major_locator(MaxNLocator(4))
-        ax.xaxis.set_major_locator(MaxNLocator(5, integer=True))
-
-    def _timeseries(self, key, ax, x, y, cw):
-        title, unit, series, signed = CHARTS[key]
-        if signed:
-            ax.axhline(0, color=T["base"], linewidth=0.9, zorder=1)
-        ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: mmss(v)))
-        handles = []
-        for dk, label, slot, ls in series:
-            dashed = ls == "--"
-            ln, = ax.plot([], [], color=SERIES[slot], linewidth=1.1 if dashed else 1.5,
-                          linestyle=(0, (3, 2)) if dashed else "-", alpha=0.75 if dashed else 1.0, zorder=3 if not dashed else 2)
-            self.L[dk] = ln
-            if label:
-                handles.append((ln, label))
-        if key == "att":                       # one key for "target" instead of two coloured dashed entries
-            tgt, = ax.plot([], [], color=T["ink2"], linewidth=1.1, linestyle=(0, (3, 2)))
-            handles.append((tgt, "target"))
-        if len(handles) >= 2:
-            ax.legend([h for h, _ in handles], [l for _, l in handles], loc="lower right",
-                      bbox_to_anchor=(1.0, 1.0), ncol=len(handles), handlelength=1.2, columnspacing=0.9,
-                      borderaxespad=0.6, handletextpad=0.5)
-        if key in SINGLE_ENDPOINT:
-            dot, = ax.plot([], [], "o", markersize=6, color=SERIES[0], markeredgecolor=T["surface"],
-                           markeredgewidth=2, zorder=4)
-            self.L[key + "_end"] = dot
-        if key == "yaw":
-            self.yaw_note = ax.text(1.0, 1.0, "", transform=ax.transAxes, ha="right", va="bottom",
-                                    fontsize=7.5, color=T["muted"])
-        if key == "hdg":
-            ax.set_ylim(0, 360)
-            ax.set_yticks([0, 90, 180, 270, 360])
-            ax.set_yticklabels(["N", "E", "S", "W", "N"])
+    # ---- centre: map + events ------------------------------------------------------------------
+    def _map_and_events(self):
+        x = self.PAD + self.RAIL_W + self.GAP
+        y, w, h = self.TOP, self.MAP_W, self.MAP_H
+        self.card(x, y, w, h)
+        self.section(x + 16, y + 26, "Ground track", "m from takeoff")
+        self.map_scale = self.text(x + w - 16, y + 26, "", fontsize=7.5, color=T["muted"], ha="right", va="bottom")
+        ax = self.fig.add_axes([self.fx(x + 12), self.fy(y + h - 12), self.fx(w - 24), (h - 12 - 40) / self.H])
+        ax.set_zorder(2)
+        self.ax["trk"] = ax
+        self._track(ax)
+        ey = y + h + self.GAP
+        self._log(x, ey, w, self.H - self.PAD - ey)
 
     def _track(self, ax):
-        ax.grid(True, axis="both")
-        ax.xaxis.set_major_locator(MaxNLocator(5))
-        self.L["trk"], = ax.plot([], [], color=SERIES[0], linewidth=1.5, zorder=3)
+        from matplotlib.patches import Circle
+        for s_ in ax.spines.values():
+            s_.set_visible(False)
+        ax.set_xticks([]); ax.set_yticks([])
+        ax.axhline(0, color=T["grid"], linewidth=0.8, zorder=1)
+        ax.axvline(0, color=T["grid"], linewidth=0.8, zorder=1)
+        self.rings, self.ring_lbl = [], []
+        for i in range(4):
+            c = Circle((0, 0), 1, fill=False, edgecolor=T["base"], linewidth=0.9, linestyle=(0, (1, 2.5)), zorder=1)
+            ax.add_patch(c)
+            self.rings.append(c)
+            self.ring_lbl.append(ax.text(0, 0, "", fontsize=7, color=T["muted"], ha="left", va="bottom", zorder=2,
+                                         clip_on=True))
+        self.north = ax.text(0.5, 0.995, "N", transform=ax.transAxes, ha="center", va="top", fontsize=8,
+                             fontweight="bold", color=T["ink2"], zorder=5)
+        self.L["trk"], = ax.plot([], [], color=SERIES[0], linewidth=1.8, zorder=3)
         self.L["home"], = ax.plot([0], [0], "s", markersize=7, color=T["ink2"], markeredgecolor=T["surface"],
                                   markeredgewidth=2, zorder=4)
         self.L["home_lbl"] = ax.annotate("home", xy=(0, 0), xytext=(0, -11), textcoords="offset points",
                                          ha="center", va="top", color=T["muted"], fontsize=7.5, zorder=4)
-        self.L["pos"], = ax.plot([], [], "o", markersize=9, color=T["ink"], markeredgecolor=SERIES[0],
+        self.L["pos"], = ax.plot([], [], "o", markersize=10, color=T["ink"], markeredgecolor=SERIES[0],
                                  markeredgewidth=2.5, zorder=6)
-        self.L["hdg_arrow"], = ax.plot([], [], color=T["ink"], linewidth=1.5, zorder=5)
+        self.L["hdg_arrow"], = ax.plot([], [], color=T["ink"], linewidth=1.6, zorder=5)
 
     def _log(self, x, y, w, h):
-        tt = self.text(x + 14, y + 26, "Events", fontsize=9.5, fontweight="bold", va="bottom")
-        self.log_sub = self.after(tt, "ArduPilot messages", 5, fontsize=8, color=T["muted"])
+        self.card(x, y, w, h)
+        _, self.log_sub = self.section(x + 16, y + 26, "Events", "ArduPilot messages")
         self.log_t, self.log_m = [], []
-        lh = (h - 44) / LOG_LINES
-        for i in range(LOG_LINES):
-            yy = y + 44 + i * lh
-            self.log_t.append(self.text(x + 52, yy, "", fontsize=7.8, color=T["muted"], ha="right", va="baseline"))
-            self.log_m.append(self.text(x + 60, yy, "", fontsize=7.8, color=T["ink2"], va="baseline"))
-        self.log_wrap = int((w - 74) / 5.0)
+        n = LOG_LINES
+        lh = (h - 44) / n
+        for i in range(n):
+            yy = y + 46 + i * lh
+            self.log_t.append(self.text(x + 58, yy, "", fontsize=7.8, family=MONO, color=T["muted"], ha="right", va="baseline"))
+            self.log_m.append(self.text(x + 66, yy, "", fontsize=7.8, color=T["ink2"], va="baseline"))
+        self.log_wrap = int((w - 110) / 5.6)
 
     def set_log(self, entries):
         """entries: newest first, list of (time label, message)."""
@@ -470,10 +467,61 @@ class Dashboard:
             else:
                 self.log_t[i].set_text(""); self.log_m[i].set_text("")
 
+    # ---- right: charts ---------------------------------------------------------------------------
+    def _charts(self):
+        x0 = self.PAD + self.RAIL_W + self.GAP + self.MAP_W + self.GAP
+        top, bottom = self.TOP, self.H - self.PAD
+        cols, rows = 2, len(CHART_GRID)
+        cw = (self.W - self.PAD - x0 - self.GAP * (cols - 1)) / cols
+        rh = (bottom - top - self.GAP * (rows - 1)) / rows
+        for r, row in enumerate(CHART_GRID):
+            for c, key in enumerate(row):
+                x, y = x0 + c * (cw + self.GAP), top + r * (rh + self.GAP)
+                self.card(x, y, cw, rh)
+                title, unit = CHARTS[key][:2]
+                self.section(x + 14, y + 22, title, unit)
+                ax = self.fig.add_axes([self.fx(x + 40), self.fy(y + rh - 22), self.fx(cw - 52), (rh - 22 - 34) / self.H])
+                ax.set_zorder(2)
+                self.ax[key] = ax
+                for s_ in ax.spines.values():
+                    s_.set_visible(False)
+                ax.grid(True, axis="y")
+                ax.set_axisbelow(True)
+                ax.yaxis.set_major_locator(MaxNLocator(4))
+                self._timeseries(key, ax)
+
+    def _timeseries(self, key, ax):
+        title, unit, series, signed = CHARTS[key]
+        if signed:
+            ax.axhline(0, color=T["base"], linewidth=0.9, zorder=1)
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda v, _: mmss(v)))
+        handles = []
+        for dk, label, slot, ls in series:
+            dashed = ls == "--"
+            ln, = ax.plot([], [], color=SERIES[slot], linewidth=1.1 if dashed else 1.6,
+                          linestyle=(0, (3, 2)) if dashed else "-", alpha=0.75 if dashed else 1.0, zorder=3 if not dashed else 2)
+            self.L[dk] = ln
+            if label:
+                handles.append((ln, label))
+        if key == "att":                       # one key for "target" instead of two coloured dashed entries
+            tgt, = ax.plot([], [], color=T["ink2"], linewidth=1.1, linestyle=(0, (3, 2)))
+            handles.append((tgt, "target"))
+        if len(handles) >= 2:
+            ax.legend([h for h, _ in handles], [l for _, l in handles], loc="lower right",
+                      bbox_to_anchor=(1.0, 1.0), ncol=len(handles), handlelength=1.0, columnspacing=0.7,
+                      borderaxespad=0.45, handletextpad=0.35)
+        if key in SINGLE_ENDPOINT:
+            dot, = ax.plot([], [], "o", markersize=6, color=SERIES[0], markeredgecolor=T["surface"],
+                           markeredgewidth=2, zorder=4)
+            self.L[key + "_end"] = dot
+        if key == "yaw":
+            self.yaw_note = ax.text(0.99, 0.04, "", transform=ax.transAxes, ha="right", va="bottom",
+                                    fontsize=7, color=T["muted"], zorder=5)
+
     # ---- shared updates ---------------------------------------------------------------------
     def set_series(self, key, t, v):
-        if key == "heading":
-            t, v = unwrap_heading(t, v)
+        if key not in self.L:
+            return
         self.L[key].set_data(t, v)
 
     def set_endpoints(self):
@@ -486,23 +534,35 @@ class Dashboard:
     def set_track(self, xs, ys, heading_deg):
         self.L["trk"].set_data(xs, ys)
         ax = self.ax["trk"]
-        if not xs:
-            pos = ax.get_position(); r = (pos.height * self.H) / (pos.width * self.W)
-            ax.set_xlim(-25, 25); ax.set_ylim(-25 * r, 25 * r)
-            return
-        self.L["pos"].set_data([xs[-1]], [ys[-1]])
-        x0, x1, y0, y1 = min(xs + [0]), max(xs + [0]), min(ys + [0]), max(ys + [0])
         pos = ax.get_position()
         r = (pos.height * self.H) / (pos.width * self.W)          # box height / width, so 1 m looks the same both ways
-        hx = max(25.0, (x1 - x0) / 2 * 1.12, (y1 - y0) / 2 * 1.12 / r)
+        if xs:
+            self.L["pos"].set_data([xs[-1]], [ys[-1]])
+            x0, x1, y0, y1 = min(xs + [0]), max(xs + [0]), min(ys + [0]), max(ys + [0])
+        else:
+            x0 = x1 = y0 = y1 = 0.0
+        hx = max(30.0, (x1 - x0) / 2 * 1.15, (y1 - y0) / 2 * 1.15 / r)
         hy = hx * r
         cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
         ax.set_xlim(cx - hx, cx + hx); ax.set_ylim(cy - hy, cy + hy)
-        half = hx
-        if isnum(heading_deg):
-            L_ = half * 0.14
-            hx, hy = xs[-1] + L_ * math.sin(math.radians(heading_deg)), ys[-1] + L_ * math.cos(math.radians(heading_deg))
-            self.L["hdg_arrow"].set_data([xs[-1], hx], [ys[-1], hy])
+        # range rings around home at a round spacing, about four across the view
+        reach = max(abs(cx) + hx, abs(cy) + hy)
+        step = next((s_ for s_ in (10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000, 2500, 5000, 10000)
+                     if s_ >= max(hx, hy) / 3.5), 20000)
+        a = math.radians(40)
+        for i, (c, lbl) in enumerate(zip(self.rings, self.ring_lbl)):
+            rad = step * (i + 1)
+            c.set_radius(rad)
+            lx, ly = rad * math.cos(a), rad * math.sin(a)
+            inside = cx - hx < lx < cx + hx * 0.9 and cy - hy < ly < cy + hy * 0.92
+            c.set_visible(rad < reach * 1.5)
+            lbl.set_position((lx, ly))
+            lbl.set_text((f"{rad/1000:g} km" if rad >= 1000 else f"{rad:g} m") if inside else "")
+        self.map_scale.set_text(f"rings every {step/1000:g} km" if step >= 1000 else f"rings every {step:g} m")
+        if xs and isnum(heading_deg):
+            L_ = hx * 0.12
+            ex, ey = xs[-1] + L_ * math.sin(math.radians(heading_deg)), ys[-1] + L_ * math.cos(math.radians(heading_deg))
+            self.L["hdg_arrow"].set_data([xs[-1], ex], [ys[-1], ey])
 
     def set_mode_markers(self, changes, xmin, label_axes="alt"):
         """Hairline at each flight-mode change, mode name on the altitude chart."""
@@ -519,9 +579,10 @@ class Dashboard:
                     continue
                 arts.append(ax.axvline(t, color=T["base"], linewidth=0.9, zorder=1))
             ax = self.ax[label_axes]
-            arts.append(ax.text(t, 0.97, f" {mode}", transform=ax.get_xaxis_transform(), fontsize=7,
-                                color=T["ink2"], va="top", ha="left", zorder=5,
-                                bbox=dict(boxstyle="square,pad=0.2", facecolor=T["surface"], edgecolor="none")))
+            lbl = ax.text(t, 0.97, f" {mode}", transform=ax.get_xaxis_transform(), fontsize=6.8,
+                          color=T["ink2"], va="top", ha="left", zorder=5,
+                          bbox=dict(boxstyle="square,pad=0.2", facecolor=T["surface"], edgecolor="none"))
+            arts.append(lbl)
             self.markers[t] = arts
         for t in list(self.markers):
             if t not in keep:
@@ -533,12 +594,24 @@ class Dashboard:
             if k == "trk":
                 continue
             ax.set_xlim(xmin, xmax)
-            ax.set_xticks(time_ticks(xmin, xmax))
-            if k != "hdg":
-                ax.relim(); ax.autoscale_view(scalex=False)
-                lo, hi = ax.get_ylim()
-                if hi - lo < 1e-6:
-                    ax.set_ylim(lo - 1, hi + 1)
+            ax.set_xticks(time_ticks(xmin, xmax, target=4))
+            ax.relim(); ax.autoscale_view(scalex=False)
+            lo, hi = ax.get_ylim()
+            if hi - lo < 1e-6:
+                ax.set_ylim(lo - 1, hi + 1)
+        # mode names on the altitude chart: keep a label only if it has room before the next one
+        ax = self.ax["alt"]
+        px_per_s = ax.get_position().width * self.W / max(1e-6, xmax - xmin)
+        ts = sorted(self.markers)
+        for i, t in enumerate(ts):
+            lbl = self.markers[t][-1]
+            room = ((ts[i + 1] if i + 1 < len(ts) else xmax) - t) * px_per_s
+            lbl.set_visible(room >= 7.0 * (len(lbl.get_text()) + 1))
+
+
+def compass(deg):
+    return "N NE E SE S SW W NW".split()[int(((deg % 360) + 22.5) // 45) % 8] if isnum(deg) else ""
+
 
 
 # --------------------------------------------------------------------------------------------
@@ -576,15 +649,17 @@ def update_live(db, st, window_s):
                       "●" if st.armed else "○")
         db.set_status("mode", st.mode, None, "◆")
         db.h["clock"].set_text(mmss(now))
-        db.set_tile("alt", "Altitude", fmt(lt["alt"]), "m")
+        db.set_tile("alt", "Altitude", fmt(lt["alt"]), "m", "above home")
         db.set_tile("air", "Airspeed", fmt(lt["airspeed"]), "m/s")
         db.set_tile("gnd", "Groundspeed", fmt(lt["groundspeed"]), "m/s")
         db.set_tile("climb", "Climb rate", fmt(lt["climb"]), "m/s")
         db.set_tile("thr", "Throttle", fmt(lt["throttle"], "{:.0f}"), "%")
+        db.set_tile("hdg", "Heading", fmt(lt["heading"], "{:.0f}") + ("°" if isnum(lt["heading"]) else ""), "", compass(lt["heading"]))
         bs = battery_status(lt["batt_pct"])
         db.set_tile("batt", "Battery", fmt(lt["volt"], "{:.2f}"), "V",
                     f"{fmt(lt['batt_pct'], '{:.0f}')} % {bs[1] if bs else ''} · {fmt(lt['curr'])} A",
                     bs[0] if bs else None)
+        db.set_meter(lt["batt_pct"], bs[0] if bs else None)
         db.set_tile("time", "Flight time", mmss(st.armed_time), "",
                     f"{st.dist_m/1000:.2f} km flown · {st.charge_mah:.0f} mAh")
         db.set_log([(mmss(t), m) for t, m in reversed(st.msgs)])
@@ -727,10 +802,13 @@ def report_png(rows, png_path, title, name):
     db.set_tile("gnd", "Max groundspeed", fmt(s["gs_max"]), "m/s")
     db.set_tile("climb", "Max climb", fmt(s["climb_max"]), "m/s", f"max sink {fmt(s['sink_max'])} m/s")
     db.set_tile("thr", "Mean throttle", fmt(s["thr_mean"], "{:.0f}"), "%")
-    db.set_tile("batt", "Energy used", f"{s['wh']:.0f}" if s["wh"] >= 100 else f"{s['wh']:.1f}", "Wh", f"{s['mah']:.0f} mAh · SITL model")
+    db.set_tile("hdg", "Max bank", fmt(s["roll_max"], "{:.0f}") + "°", "", f"max pitch {fmt(s['pitch_max'], '{:.0f}')}°")
+    db.set_tile("batt", "Energy used", f"{s['wh']:.0f}" if s["wh"] >= 100 else f"{s['wh']:.1f}", "Wh",
+                f"{s['mah']:.0f} mAh · SITL model, not calibrated")
+    db.set_meter(math.nan)
     db.set_tile("time", "Flight time", mmss(s["armed_s"]), "", f"{s['dist']/1000:.2f} km flown")
-    lines = [("modes", " > ".join(s["modes"]) or "-"),
-             ("roll/pitch", f"max {fmt(s['roll_max'])}° / {fmt(s['pitch_max'])}°"),
+    wrapped = textwrap.wrap(" > ".join(s["modes"]) or "-", db.log_wrap - 6) or ["-"]
+    lines = [("modes" if i == 0 else "", ln) for i, ln in enumerate(wrapped)] + [
              ("yaw error", f"mean {fmt(s['yerr_mean'])}, max {fmt(s['yerr_max'])} °/s" if have_pid else "not recorded"),
              ("min volt", f"{fmt(s['v_min'], '{:.2f}')} V"),
              ("battery", "SITL model, not calibrated")]

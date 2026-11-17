@@ -59,6 +59,7 @@ awk -v m="$MODEL" -v z="$SZ" '/<\/world>/{print "    <include>\n      <uri>model
   "$WORLD_DIR/world.sdf" > "$WORLD_FILE"
 EXTRA_RES="${EXTRA_RES:-}"
 NAME="${NAME:-${VEH}_${WORLD}}"
+TITLE="${MODEL^^}"; [ "$MODEL" = virmaya ] && TITLE="VIRMAYA-33A"
 
 if command -v gnome-terminal >/dev/null; then
   term() { gnome-terminal --title="$1" -- bash -c "$2; echo; echo '[$1 finished - press Enter to close]'; read"; }
@@ -98,7 +99,7 @@ if [ "$DASH" = 1 ]; then
     echo -n "."; sleep 2
   done
   sleep 5
-  term "Dashboard" "source '$ENV'; cd ~; python3 '$VIRMAYA_SIM/tools/sim_dashboard.py' --pid --name '$NAME' --title '${MODEL^^}' --connect tcp:127.0.0.1:5762"
+  term "Dashboard" "source '$ENV'; cd ~; python3 '$VIRMAYA_SIM/tools/sim_dashboard.py' --pid --name '$NAME' --title '$TITLE' --connect tcp:127.0.0.1:5762"
 fi
 
 cat <<EOF
