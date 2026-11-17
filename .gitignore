@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# ArduPilot SITL run files (created wherever sim_vehicle.py runs)
+eeprom.bin
+mav.tlog
+mav.tlog.raw
+mav.parm
+terrain/
+logs/
+*.tlog
+
+# Simulation results. Keep useful ones under results/ deliberately with: git add -f
+sim_results/
+results/*
+!results/README.md
+
+# Generated worlds (big; rebuild with tools/make_sim_world.py)
+sim_worlds/
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store

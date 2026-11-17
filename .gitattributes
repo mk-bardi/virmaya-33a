@@ -1,0 +1,18 @@
+# Never let git change line endings in CAD, meshes or data files
+*.STEP  binary
+*.step  binary
+*.npz   binary
+*.obj   -text diff
+*.dae   -diff
+*.png   binary
+*.jpg   binary
+*.docx  binary
+*.BIN   binary
+
+# Scripts must keep Unix line endings even if edited on Windows
+*.sh    text eol=lf
+*.py    text eol=lf
+*.parm  text eol=lf
+*.param text eol=lf
+*.sdf   text eol=lf
+*.env   text eol=lf

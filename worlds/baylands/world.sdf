@@ -1,0 +1,133 @@
+<?xml version="1.0"?>
+<!-- baylands: Baylands Park (Gazebo Fuel) set up for ArduPilot SITL.
+     Origin = takeoff point on the ground (37.4121731, -121.9988787, 38.0 m AMSL), x east, y north. -->
+<sdf version="1.9">
+  <world name="baylands">
+    <physics name="1ms" type="ignore">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu"/>
+    <plugin filename="gz-sim-navsat-system" name="gz::sim::systems::NavSat"/>
+
+    <gui fullscreen="0">
+      <plugin filename="MinimalScene" name="3D View">
+        <gz-gui><title>3D View</title><property type="bool" key="showTitleBar">false</property>
+          <property type="string" key="state">docked</property></gz-gui>
+        <engine>ogre2</engine>
+        <scene>scene</scene>
+        <ambient_light>0.55 0.55 0.55</ambient_light>
+        <background_color>0.62 0.74 0.88</background_color>
+        <camera_pose>-12 -12 8 0 0.35 0.785</camera_pose>
+        <camera_clip><near>0.25</near><far>6000</far></camera_clip>
+        <sky></sky>
+      </plugin>
+      <plugin filename="EntityContextMenuPlugin" name="Entity context menu">
+        <gz-gui><property key="state" type="string">floating</property><property key="width" type="double">5</property>
+          <property key="height" type="double">5</property><property key="showTitleBar" type="bool">false</property></gz-gui>
+      </plugin>
+      <plugin filename="GzSceneManager" name="Scene Manager">
+        <gz-gui><property key="resizable" type="bool">false</property><property key="width" type="double">5</property>
+          <property key="height" type="double">5</property><property key="state" type="string">floating</property>
+          <property key="showTitleBar" type="bool">false</property></gz-gui>
+      </plugin>
+      <plugin filename="InteractiveViewControl" name="Interactive view control">
+        <gz-gui><property key="resizable" type="bool">false</property><property key="width" type="double">5</property>
+          <property key="height" type="double">5</property><property key="state" type="string">floating</property>
+          <property key="showTitleBar" type="bool">false</property></gz-gui>
+      </plugin>
+      <plugin filename="CameraTracking" name="Camera Tracking">
+        <gz-gui><property key="resizable" type="bool">false</property><property key="width" type="double">5</property>
+          <property key="height" type="double">5</property><property key="state" type="string">floating</property>
+          <property key="showTitleBar" type="bool">false</property></gz-gui>
+      </plugin>
+      <plugin filename="MarkerManager" name="Marker manager">
+        <gz-gui><property key="resizable" type="bool">false</property><property key="width" type="double">5</property>
+          <property key="height" type="double">5</property><property key="state" type="string">floating</property>
+          <property key="showTitleBar" type="bool">false</property></gz-gui>
+      </plugin>
+      <plugin filename="SelectEntities" name="Select Entities">
+        <gz-gui><anchors target="Select entities"><line own="right" target="right"/><line own="top" target="top"/></anchors>
+          <property key="resizable" type="bool">false</property><property key="width" type="double">5</property>
+          <property key="height" type="double">5</property><property key="state" type="string">floating</property>
+          <property key="showTitleBar" type="bool">false</property></gz-gui>
+      </plugin>
+      <plugin filename="Spawn" name="Spawn Entities">
+        <gz-gui><property key="resizable" type="bool">false</property><property key="width" type="double">5</property>
+          <property key="height" type="double">5</property><property key="state" type="string">floating</property>
+          <property key="showTitleBar" type="bool">false</property></gz-gui>
+      </plugin>
+      <plugin filename="VisualizationCapabilities" name="Visualization Capabilities">
+        <gz-gui><property key="resizable" type="bool">false</property><property key="width" type="double">5</property>
+          <property key="height" type="double">5</property><property key="state" type="string">floating</property>
+          <property key="showTitleBar" type="bool">false</property></gz-gui>
+      </plugin>
+      <plugin filename="WorldControl" name="World control">
+        <gz-gui><title>World control</title><property type="bool" key="showTitleBar">false</property>
+          <property type="bool" key="resizable">false</property><property type="double" key="height">72</property>
+          <property type="double" key="width">121</property><property type="double" key="z">1</property>
+          <property type="string" key="state">floating</property>
+          <anchors target="3D View"><line own="left" target="left"/><line own="bottom" target="bottom"/></anchors></gz-gui>
+        <play_pause>true</play_pause><step>true</step><start_paused>true</start_paused><use_event>true</use_event>
+      </plugin>
+      <plugin filename="WorldStats" name="World stats">
+        <gz-gui><title>World stats</title><property type="bool" key="showTitleBar">false</property>
+          <property type="bool" key="resizable">false</property><property type="double" key="height">110</property>
+          <property type="double" key="width">290</property><property type="double" key="z">1</property>
+          <property type="string" key="state">floating</property>
+          <anchors target="3D View"><line own="right" target="right"/><line own="bottom" target="bottom"/></anchors></gz-gui>
+        <sim_time>true</sim_time><real_time>true</real_time><real_time_factor>true</real_time_factor><iterations>true</iterations>
+      </plugin>
+      <plugin filename="EntityTree" name="Entity tree">
+        <gz-gui><property type="string" key="state">docked_collapsed</property></gz-gui>
+      </plugin>
+    </gui>
+
+    <gravity>0 0 -9.8066</gravity>
+    <spherical_coordinates>
+      <surface_model>EARTH_WGS84</surface_model>
+      <world_frame_orientation>ENU</world_frame_orientation>
+      <latitude_deg>37.412173072</latitude_deg>
+      <longitude_deg>-121.998878728</longitude_deg>
+      <elevation>38.0</elevation>
+      <heading_deg>0</heading_deg>
+    </spherical_coordinates>
+
+    <scene>
+      <ambient>0.55 0.55 0.55 1</ambient>
+      <background>0.62 0.74 0.88 1</background>
+      <grid>false</grid>
+      <shadows>true</shadows>
+      <sky></sky>
+    </scene>
+
+    <!-- mid-morning sun for this latitude (elevation 27 deg) -->
+    <light name="sun" type="directional">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 100 0 0 0</pose>
+      <diffuse>1.0 0.97 0.9 1</diffuse>
+      <specular>0.1 0.1 0.1 1</specular>
+      <intensity>1.2</intensity>
+      <direction>-0.4717 0.7598 -0.4474</direction>
+    </light>
+
+    <!-- Baylands Park, Sunnyvale CA: photogrammetry model with real trees (Open Robotics, Gazebo Fuel).
+         First launch downloads it from fuel.gazebosim.org, which can take several minutes. -->
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/baylands</uri>
+      <name>park</name>
+      <pose>205 155 -1 0 0 0</pose>
+    </include>
+    <include>
+      <uri>https://fuel.gazebosim.org/1.0/OpenRobotics/models/Coast Water</uri>
+      <name>water</name>
+      <pose>205 155 -3 0 0 0</pose>
+    </include>
+  </world>
+</sdf>
