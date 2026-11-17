@@ -57,15 +57,27 @@ To plan your own, connect Mission Planner or QGroundControl to SITL at `tcp:127.
 
 ## Results
 
+The dashboard is built for research. Panels (a) to (i) are figure-style plots on a shared time axis: altitude, speed, pusher output, roll, pitch and yaw-rate tracking (actual against the autopilot's command, grey dashed), lift-motor outputs against PWM max, battery voltage and current. A timeline under the header shows the flight mode at every moment. Panel (k) gives run metrics, over the last 90 s while flying and over the whole flight in the report:
+
+| Metric | What it tells you |
+|---|---|
+| Roll and pitch error, RMS | How well the attitude follows the command |
+| Yaw-rate error, RMS | Needs `--pid` (the launcher sets it) |
+| Lift motors at max | Share of VTOL time with any lift motor within 20 µs of PWM max. Above a few percent, the aircraft is short of thrust or yaw authority |
+| Lift motor spread | Mean gap between the highest and lowest lift motor. A large spread means the motors are fighting an imbalance (CG, yaw, a weak motor) |
+| Hover motor output | Mean lift-motor output while hovering, as a fraction of the PWM range |
+| Voltage, current, energy | Power figures. Energy is from the SITL battery model, which is not calibrated yet |
+
 When the dashboard closes it saves to `~/sim_results/`:
 
-- `<date>_<time>_<name>.csv`: every sample,
+- `<date>_<time>_<name>.csv`: every sample at 10 Hz,
 - `<date>_<time>_<name>.png`: the report,
-- `<date>_<time>_<name>_summary.txt`: a text summary.
+- `<date>_<time>_<name>.pdf`: the same report as a vector file, for papers and the thesis,
+- `<date>_<time>_<name>_summary.txt`: a text summary with the research metrics.
 
 ![Dashboard report](images/dashboard_report.png)
 
-Rebuild a report from a CSV with `python3 tools/sim_dashboard.py --report <file.csv>`. To keep one in the repo, copy it under `results/` and `git add -f` it.
+Rebuild a report from a CSV with `python3 tools/sim_dashboard.py --report <file.csv> --title VIRMAYA-33A`. To keep one in the repo, copy it under `results/` and `git add -f` it.
 
 ## Logs
 
